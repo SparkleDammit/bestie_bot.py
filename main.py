@@ -27,11 +27,11 @@ async def check(interaction: discord.Interaction, color: app_commands.Choice[str
         )
     elif color.value == "yellow":
         await interaction.channel.send(
-            "<:WAIT:1490423509812511084> **Please wait.** Something shifted. I'm not sure. Pause here. Check in. Pull back."
+            "<:WAIT:1490423509812511084>"
         )
     elif color.value == "red":
         await interaction.channel.send(
-            "<:STOP:1490423467500109994> **Please stop.** This ends now."
+            "<:STOP:1490423467500109994>"
         )
 
 @client.event
