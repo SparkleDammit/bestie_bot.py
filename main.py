@@ -9,6 +9,7 @@ tree = app_commands.CommandTree(client)
 @tree.command(name="check", description="Trigger an anonymous comfort check")
 @app_commands.describe(color="Optional: signal a specific light without a full check-in")
 @app_commands.choices(color=[
+    app_commands.Choice(name="green", value="green"),
     app_commands.Choice(name="yellow", value="yellow"),
     app_commands.Choice(name="red", value="red"),
 ])
@@ -25,14 +26,12 @@ async def check(interaction: discord.Interaction, color: app_commands.Choice[str
             "<:WAIT:1490423509812511084> **Please wait.** Something shifted. I'm not sure. Pause here. Check in. Pull back.\n"
             "<:STOP:1490423467500109994> **Please stop.** This ends now."
         )
+    elif color.value == "green":
+        await interaction.channel.send("<:GO:1490423634366304428>")
     elif color.value == "yellow":
-        await interaction.channel.send(
-            "<:WAIT:1490423509812511084>"
-        )
+        await interaction.channel.send("<:WAIT:1490423509812511084>")
     elif color.value == "red":
-        await interaction.channel.send(
-            "<:STOP:1490423467500109994>"
-        )
+        await interaction.channel.send("<:STOP:1490423467500109994>")
 
 @client.event
 async def on_ready():
