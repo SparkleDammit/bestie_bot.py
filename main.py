@@ -145,20 +145,22 @@ async def cumcount(
         data["total_came"] += count
         message = (
             f"{name} came **{count}** {times} woohooo 🎉\n"
-            f"Congrats on the sex 🎊\n"
+            f"https://images-ext-1.discordapp.net/external/H8Ff49ZiBKn4nN2R8SbdJcMkufje7TcT3EO8L_qBJeA/https/media4.giphy.com/media/v1.Y2lkPTczYjhmN2Ixb2VmM3E1OXltemEzbmZwNzh5dHNqZHFocjVid3phZDMyNjh4c3QxMyZlcD12MV9naWZzX2dpZklkJmN0PWc/ToMjGpztIHdXWtq7052/giphy.mp4\n"
             f"{name} Thank you, cum again 😏"
         )
     elif result.value == "edged":
         data["total_edged"] += count
         message = (
-            f"{name} edged **{count}** {times} yiiissss 😮‍💨\n"
-            f"Congrats on the sex 🎊"
+            f"{name} edged **{count}** {times}\n"
+            f"\"DoN't SpiLL oUr CuM!!\"\n"
+            f"https://images-ext-1.discordapp.net/external/sHD6xdiXM5lINWi2f1MlOaut85eY7KtuFBXZZ_dzzIc/https/media.tenor.com/63KOKBWSFCoAAAPo/krieger-archer.mp4"
         )
     elif result.value == "ruined":
         data["total_ruined"] += count
         message = (
-            f"{name} had **{count}** ruined orgasm{'s' if count != 1 else ''} 😩\n"
-            f"F in the chat 💀"
+            f"{name} had **{count}** ruined orgasm{'s' if count != 1 else ''}\n"
+            f"Whoops\n"
+            f"https://images-ext-1.discordapp.net/external/fn6uGeJlojcX0UzxA0FWk2A1PKDyoi--UPLb9dLCtkU/https/media.tenor.com/sAFLGXRihNYAAAPo/archer-are-you-coming.mp4"
         )
 
     save_data(data)
@@ -173,14 +175,9 @@ async def cumcount(
 
 @client.event
 async def on_ready():
+    guild = discord.Object(id=1487446782219911241)
+    tree.copy_global_to(guild=guild)
+    await tree.sync(guild=guild)
     print(f"Logged in as {client.user}")
-
-    # Guild sync — makes commands available immediately in the target guild
-    try:
-        guild = discord.Object(id=1487446782219911241)
-        guild_commands = await tree.sync(guild=guild)
-        print(f"Synced {len(guild_commands)} command(s) to guild {guild.id}: {[c.name for c in guild_commands]}")
-    except Exception as e:
-        print(f"Guild sync failed: {e}")
 
 client.run(os.environ["DISCORD_TOKEN"])
