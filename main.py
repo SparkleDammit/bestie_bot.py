@@ -29,19 +29,12 @@ def build_embed(data: dict) -> discord.Embed:
         title="🍆 Cumcount Scoreboard",
         color=discord.Color.purple()
     )
-    if not data:
-        embed.description = "No entries yet. Use `/cumcount` to log one!"
-        return embed
-
-    lines = []
-    for user_id, counts in sorted(data.items(), key=lambda x: x[1].get("orgasms", 0), reverse=True):
-        orgasms = counts.get("orgasms", 0)
-        edges = counts.get("edges", 0)
-        ruins = counts.get("ruins", 0)
-        lines.append(
-            f"<@{user_id}> — 💦 {orgasms} orgasm(s) | 🔥 {edges} edge(s) | 💔 {ruins} ruin(s)"
-        )
-    embed.description = "\n".join(lines)
+    total_orgasms = sum(v.get("orgasms", 0) for v in data.values())
+    total_edges = sum(v.get("edges", 0) for v in data.values())
+    total_ruins = sum(v.get("ruins", 0) for v in data.values())
+    embed.add_field(name="💦 Orgasms", value=str(total_orgasms), inline=True)
+    embed.add_field(name="🔥 Edges", value=str(total_edges), inline=True)
+    embed.add_field(name="💔 Ruins", value=str(total_ruins), inline=True)
     return embed
 
 
