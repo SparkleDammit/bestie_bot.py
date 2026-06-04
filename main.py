@@ -194,6 +194,7 @@ async def resetcount_error(interaction: discord.Interaction, error: app_commands
 @client.event
 async def on_ready():
     guild = discord.Object(id=1487446782219911241)
+    await tree.clear_commands(guild=guild)
     await tree.sync(guild=guild)
     print(f"Logged in as {client.user}")
 
