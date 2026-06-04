@@ -4,7 +4,8 @@ import os
 import json
 
 # --- Persistence ---
-DATA_FILE = "counts.json"
+DATA_FILE = "/app/data/counts.json"
+os.makedirs("/app/data", exist_ok=True)
 
 def load_data():
     if os.path.exists(DATA_FILE):
