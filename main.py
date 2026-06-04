@@ -147,21 +147,18 @@ async def cumcount(
             f"{name} came **{count}** {times} woohooo 🎉\n"
             f"{name} Thank you, cum again 😏"
         )
-        gif = "https://images-ext-1.discordapp.net/external/H8Ff49ZiBKn4nN2R8SbdJcMkufje7TcT3EO8L_qBJeA/https/media4.giphy.com/media/v1.Y2lkPTczYjhmN2Ixb2VmM3E1OXltemEzbmZwNzh5dHNqZHFocjVid3phZDMyNjh4c3QxMyZlcD12MV9naWZzX2dpZklkJmN0PWc/ToMjGpztIHdXWtq7052/giphy.mp4"
     elif result.value == "edged":
         data["total_edged"] += count
         text = (
             f"{name} edged **{count}** {times}\n"
             f"\"DoN't SpiLL oUr CuM!!\""
         )
-        gif = "https://images-ext-1.discordapp.net/external/sHD6xdiXM5lINWi2f1MlOaut85eY7KtuFBXZZ_dzzIc/https/media.tenor.com/63KOKBWSFCoAAAPo/krieger-archer.mp4"
     elif result.value == "ruined":
         data["total_ruined"] += count
         text = (
             f"{name} had **{count}** ruined orgasm{'s' if count != 1 else ''}\n"
             f"Whoops"
         )
-        gif = "https://images-ext-1.discordapp.net/external/fn6uGeJlojcX0UzxA0FWk2A1PKDyoi--UPLb9dLCtkU/https/media.tenor.com/sAFLGXRihNYAAAPo/archer-are-you-coming.mp4"
 
     save_data(data)
 
@@ -171,7 +168,6 @@ async def cumcount(
     else:
         await interaction.response.send_message(text)
 
-    await interaction.channel.send(gif)
     await update_scoreboard(data)
 
 @client.event
