@@ -120,61 +120,66 @@ async def linkdrop(interaction: discord.Interaction, message: str, role: app_com
 
 
 # --- /cumcount command ---
-@tree.command(name="cumcount", description="Log an orgasm, edge, or ruin to the scoreboard")
-@app_commands.describe(
-    event="What happened?",
-    count="How many times? (default: 1)",
-    anonymous="Hide your name? (default: no)",
-    user="Optional: log on behalf of another user (admin)"
-)
-@app_commands.choices(event=[
-    app_commands.Choice(name="came", value="orgasms"),
-    app_commands.Choice(name="edged", value="edges"),
-    app_commands.Choice(name="ruined", value="ruins"),
-])
-async def cumcount(
-    interaction: discord.Interaction,
-    event: app_commands.Choice[str],
-    count: int = 1,
-    anonymous: bool = False,
-    user: discord.Member = None
-):
-    target = user if user is not None else interaction.user
-    data = load_data()
-    user_key = str(target.id)
-    times = "time" if count == 1 else "times"
-
-    if user_key not in data:
-        data[user_key] = {"orgasms": 0, "edges": 0, "ruins": 0}
-
-    data[user_key][event.value] = data[user_key].get(event.value, 0) + count
-    save_data(data)
-
-    name = "Someone" if anonymous else target.mention
-
-    if event.value == "orgasms":
-        text = (
-            f"{name} came **{count}** {times} woohooo 🎉\n"
-            f"Thank you, cum again 😏"
-        )
-    elif event.value == "edges":
-        text = (
-            f"{name} edged **{count}** {times}\n"
-            f"\"DoN't SpiLL oUr CuM!!\""
-        )
-    elif event.value == "ruins":
-        text = (
-            f"{name} had **{count}** ruined orgasm{'s' if count != 1 else ''}\n"
-            f"Whoops"
-        )
-
-    if anonymous:
-        await interaction.response.send_message("Logged anonymously ✅", ephemeral=True)
-        await interaction.channel.send(text)
-    else:
-        await interaction.response.send_message(text)
-
-    await update_scoreboard(interaction.guild, data)
+# TEMPORARILY REMOVED to force Discord to clear the cached command signature.
+# The old command had different parameters (result/count/anonymous) which caused
+# a CommandSignatureMismatch. Once the bot syncs without this command, Discord
+# will delete the stale definition and it can be re-added with the new signature.
+#
+# @tree.command(name="cumcount", description="Log an orgasm, edge, or ruin to the scoreboard")
+# @app_commands.describe(
+#     event="What happened?",
+#     count="How many times? (default: 1)",
+#     anonymous="Hide your name? (default: no)",
+#     user="Optional: log on behalf of another user (admin)"
+# )
+# @app_commands.choices(event=[
+#     app_commands.Choice(name="came", value="orgasms"),
+#     app_commands.Choice(name="edged", value="edges"),
+#     app_commands.Choice(name="ruined", value="ruins"),
+# ])
+# async def cumcount(
+#     interaction: discord.Interaction,
+#     event: app_commands.Choice[str],
+#     count: int = 1,
+#     anonymous: bool = False,
+#     user: discord.Member = None
+# ):
+#     target = user if user is not None else interaction.user
+#     data = load_data()
+#     user_key = str(target.id)
+#     times = "time" if count == 1 else "times"
+#
+#     if user_key not in data:
+#         data[user_key] = {"orgasms": 0, "edges": 0, "ruins": 0}
+#
+#     data[user_key][event.value] = data[user_key].get(event.value, 0) + count
+#     save_data(data)
+#
+#     name = "Someone" if anonymous else target.mention
+#
+#     if event.value == "orgasms":
+#         text = (
+#             f"{name} came **{count}** {times} woohooo 🎉\n"
+#             f"Thank you, cum again 😏"
+#         )
+#     elif event.value == "edges":
+#         text = (
+#             f"{name} edged **{count}** {times}\n"
+#             f"\"DoN't SpiLL oUr CuM!!\""
+#         )
+#     elif event.value == "ruins":
+#         text = (
+#             f"{name} had **{count}** ruined orgasm{'s' if count != 1 else ''}\n"
+#             f"Whoops"
+#         )
+#
+#     if anonymous:
+#         await interaction.response.send_message("Logged anonymously ✅", ephemeral=True)
+#         await interaction.channel.send(text)
+#     else:
+#         await interaction.response.send_message(text)
+#
+#     await update_scoreboard(interaction.guild, data)
 
 
 # --- /resetcount command ---
