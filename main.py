@@ -32,14 +32,26 @@ def build_embed(data: dict) -> discord.Embed:
     total_orgasms = sum(v.get("orgasms", 0) for v in data.values())
     total_edges = sum(v.get("edges", 0) for v in data.values())
     total_ruins = sum(v.get("ruins", 0) for v in data.values())
-    embed.add_field(name="💦 Orgasms", value=str(total_orgasms), inline=True)
-    embed.add_field(name="🔥 Edges", value=str(total_edges), inline=True)
-    embed.add_field(name="💔 Ruins", value=str(total_ruins), inline=True)
+    embed.add_field(name="💦 Total Orgasms", value=str(total_orgasms), inline=True)
+    embed.add_field(name="🔥 Total Edges", value=str(total_edges), inline=True)
+    embed.add_field(name="💔 Total Ruins", value=str(total_ruins), inline=True)
+
+    if data:
+        lines = []
+        for user_id, counts in sorted(data.items(), key=lambda x: x[1].get("orgasms", 0), reverse=True):
+            o = counts.get("orgasms", 0)
+            e = counts.get("edges", 0)
+            r = counts.get("ruins", 0)
+            lines.append(f"<@{user_id}> — 💦 {o} | 🔥 {e} | 💔 {r}")
+        embed.add_field(name="​", value="\n".join(lines), inline=False)
+
     return embed
 
 
 async def update_scoreboard(guild: discord.Guild, data: dict) -> None:
-    channel = guild.get_channel(SCOREBOARD_CHANNEL_ID)
+    channel = client.get_channel(SCOREBOARD_CHANNEL_ID)
+    if channel is None:
+        channel = await client.fetch_channel(SCOREBOARD_CHANNEL_ID)
     if channel is None:
         return
     embed = build_embed(data)
