@@ -177,6 +177,17 @@ async def cumcount(
     await update_scoreboard(interaction.guild, data)
 
 
+@cumcount.error
+async def cumcount_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CommandSignatureMismatch):
+        await interaction.response.send_message(
+            "This command is being updated — please wait a moment and try again.",
+            ephemeral=True
+        )
+    else:
+        raise error
+
+
 # --- /resetcount command ---
 @tree.command(name="resetcount", description="Reset the scoreboard (admin only)")
 @app_commands.checks.has_permissions(administrator=True)
@@ -194,7 +205,10 @@ async def resetcount_error(interaction: discord.Interaction, error: app_commands
 @client.event
 async def on_ready():
     guild = discord.Object(id=1487446782219911241)
-    await tree.sync(guild=guild)
+    synced = await tree.sync(guild=guild)
     print(f"Logged in as {client.user}")
+    print(f"Synced {len(synced)} command(s) to guild {guild.id}:")
+    for cmd in synced:
+        print(f"  /{cmd.name}")
 
 client.run(os.environ["DISCORD_TOKEN"])
