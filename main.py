@@ -173,9 +173,22 @@ async def cumcount(
 
 @client.event
 async def on_ready():
-    guild = discord.Object(id=1487446782219911241)
-    tree.copy_global_to(guild=guild)
-    await tree.sync(guild=guild)
     print(f"Logged in as {client.user}")
+
+    # Global sync — makes commands available in all guilds (takes up to 1 hour to propagate)
+    try:
+        global_commands = await tree.sync()
+        print(f"Synced {len(global_commands)} command(s) globally: {[c.name for c in global_commands]}")
+    except Exception as e:
+        print(f"Global sync failed: {e}")
+
+    # Guild sync — makes commands available immediately in the target guild
+    try:
+        guild = discord.Object(id=1487446782219911241)
+        tree.copy_global_to(guild=guild)
+        guild_commands = await tree.sync(guild=guild)
+        print(f"Synced {len(guild_commands)} command(s) to guild {guild.id}: {[c.name for c in guild_commands]}")
+    except Exception as e:
+        print(f"Guild sync failed: {e}")
 
 client.run(os.environ["DISCORD_TOKEN"])
