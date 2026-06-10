@@ -501,6 +501,8 @@ async def on_ready():
     print(f"Logged in as {client.user}")
 
 # ── Run both Flask and Discord together ───────────────────────────────────────
+init_db()
+
 flask_thread = threading.Thread(target=run_flask, daemon=True)
 flask_thread.start()
 
