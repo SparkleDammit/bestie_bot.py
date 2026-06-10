@@ -198,6 +198,7 @@ def view_image(token):
 <head><title>Selfie</title></head>
 <body style="background:#111;display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;margin:0;font-family:sans-serif;color:white;">
 <p style="margin-bottom:20px;">{uploader_name} posted a selfie for you. Once you view it, it's gone.</p>
+<p style="margin-bottom:20px;font-size:13px;color:#aaa;max-width:400px;text-align:center;">⚠️ This image is watermarked with your name and timestamp. Screenshots and recordings are traceable. Admins are immediately notified.</p>
 <a href="/open/{token}" style="background:#e05;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:18px;">View Selfie</a>
 </body>
 </html>"""
