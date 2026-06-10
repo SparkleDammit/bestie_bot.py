@@ -55,19 +55,27 @@ def view_image(token):
             abort(404)
 
         if row["viewed"]:
-            abort(410)  # Gone
+            return "<h2>This image has already been viewed and is no longer available.</h2>", 410
 
         if datetime.utcnow() > datetime.fromisoformat(row["expires_at"]):
-            abort(410)  # Expired
+            return "<h2>This link has expired.</h2>", 410
 
         # Mark as viewed
         conn.execute("UPDATE tokens SET viewed = 1 WHERE token = ?", (token,))
         conn.commit()
 
-        return send_file(
-            io.BytesIO(row["image_data"]),
-            mimetype=row["content_type"]
-        )
+        import base64
+        b64 = base64.b64encode(row["image_data"]).decode("utf-8")
+        mime = row["content_type"]
+
+        return f"""
+        <html>
+        <head><title>Selfie</title></head>
+        <body style="background:#000;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;">
+        <img src="data:{mime};base64,{b64}" style="max-width:100%;max-height:100vh;">
+        </body>
+        </html>
+        """
 
 def run_flask():
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
