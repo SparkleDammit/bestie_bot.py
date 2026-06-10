@@ -89,8 +89,7 @@ def watermark_image(image_data, content_type, viewer_name, timestamp):
     return output.getvalue()
 
 def build_open_page(mime, b64, token):
-    return """
-<!DOCTYPE html>
+    return """<!DOCTYPE html>
 <html>
 <head>
 <title>Selfie</title>
@@ -148,22 +147,12 @@ body {
         }
     });
 
-    var hiddenTimer = null;
-    document.addEventListener("visibilitychange", function() {
-        if (document.hidden) {
-            hiddenTimer = setTimeout(function() {
-                notifyScreenshot();
-            }, 2000);
-        } else {
-            clearTimeout(hiddenTimer);
-        }
-    });
-
     var seconds = 10;
     var timerEl = document.getElementById("timer");
     var imgWrap = document.getElementById("img-wrap");
     var gone = document.getElementById("gone");
     var countdown = document.getElementById("countdown");
+    var imageBurned = false;
 
     var interval = setInterval(function() {
         seconds--;
@@ -174,16 +163,17 @@ body {
             countdown.style.display = "none";
             gone.style.display = "block";
             document.getElementById("selfie-img").src = "";
+            imageBurned = true;
         }
     }, 1000);
 
     function notifyScreenshot() {
+        if (imageBurned) return;
         fetch(SCREENSHOT_URL, { method: "POST" });
     }
 </script>
 </body>
-</html>
-""".strip()
+</html>""".strip()
 
 @flask_app.route("/view/<token>")
 def view_image(token):
