@@ -45,14 +45,14 @@ def init_db():
 def view_image(token):
     with get_db() as conn:
         row = conn.execute("""
-            SELECT t.viewed, t.selfie_id, s.image_data, s.content_type, s.expires_at
+            SELECT t.viewed, s.uploader_name, s.expires_at
             FROM tokens t
             JOIN selfies s ON t.selfie_id = s.id
             WHERE t.token = ?
         """, (token,)).fetchone()
 
         if not row:
-            abort(404)
+            return "<h2>This link is invalid.</h2>", 404
 
         if row["viewed"]:
             return "<h2>This image has already been viewed and is no longer available.</h2>", 410
@@ -60,7 +60,35 @@ def view_image(token):
         if datetime.utcnow() > datetime.fromisoformat(row["expires_at"]):
             return "<h2>This link has expired.</h2>", 410
 
-        # Mark as viewed
+        return f"""
+        <html>
+        <head><title>Selfie</title></head>
+        <body style="background:#111;display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;margin:0;font-family:sans-serif;color:white;">
+        <p style="margin-bottom:20px;">{row['uploader_name']} posted a selfie for you. Once you view it, it's gone.</p>
+        <a href="/open/{token}" style="background:#e05;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:18px;">View Selfie</a>
+        </body>
+        </html>
+        """
+
+@flask_app.route("/open/<token>")
+def open_image(token):
+    with get_db() as conn:
+        row = conn.execute("""
+            SELECT t.viewed, t.selfie_id, s.image_data, s.content_type, s.expires_at
+            FROM tokens t
+            JOIN selfies s ON t.selfie_id = s.id
+            WHERE t.token = ?
+        """, (token,)).fetchone()
+
+        if not row:
+            return "<h2>This link is invalid.</h2>", 404
+
+        if row["viewed"]:
+            return "<h2>This image has already been viewed and is no longer available.</h2>", 410
+
+        if datetime.utcnow() > datetime.fromisoformat(row["expires_at"]):
+            return "<h2>This link has expired.</h2>", 410
+
         conn.execute("UPDATE tokens SET viewed = 1 WHERE token = ?", (token,))
         conn.commit()
 
