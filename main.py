@@ -5,6 +5,7 @@ import sqlite3
 import uuid
 import asyncio
 import threading
+import base64
 from datetime import datetime, timedelta
 from flask import Flask, send_file, abort
 import io
@@ -93,11 +94,8 @@ def open_image(token):
         conn.execute("UPDATE tokens SET viewed = 1 WHERE token = ?", (token,))
         conn.commit()
 
-        import base64
         b64 = base64.b64encode(row["image_data"]).decode("utf-8")
         mime = row["content_type"]
-        uploader_id = row["uploader_id"]
-        viewer_id = row["user_id"]
 
         return f"""
         <html>
@@ -136,10 +134,7 @@ def open_image(token):
             }}
         </style>
         </head>
-        <body
-            oncontextmenu="return false"
-            ondragstart="return false"
-        >
+        <body oncontextmenu="return false" ondragstart="return false">
         <div id="countdown">This image will self-destruct in <span id="timer">10</span>s</div>
         <div id="img-wrap">
             <img id="selfie-img" src="data:{mime};base64,{b64}" draggable="false">
@@ -147,7 +142,6 @@ def open_image(token):
         <div id="gone">This image has been destroyed.</div>
 
         <script>
-            // Block save shortcuts
             document.addEventListener("keydown", function(e) {{
                 if (
                     e.key === "PrintScreen" ||
@@ -159,7 +153,6 @@ def open_image(token):
                 }}
             }});
 
-            // Countdown and self-destruct
             let seconds = 10;
             const timerEl = document.getElementById("timer");
             const imgWrap = document.getElementById("img-wrap");
@@ -174,12 +167,10 @@ def open_image(token):
                     imgWrap.style.display = "none";
                     countdown.style.display = "none";
                     gone.style.display = "block";
-                    // Nuke the image data from memory
                     document.getElementById("selfie-img").src = "";
                 }}
             }}, 1000);
 
-            // Screenshot notification
             function notifyScreenshot() {{
                 fetch("/screenshot/{token}", {{ method: "POST" }});
             }}
@@ -201,7 +192,6 @@ def screenshot_detected(token):
         if not row:
             return "", 204
 
-        # Check if already notified to avoid spam
         existing = conn.execute(
             "SELECT 1 FROM tokens WHERE token = ? AND screenshot_notified = 1", (token,)
         ).fetchone()
@@ -211,29 +201,21 @@ def screenshot_detected(token):
         conn.execute("UPDATE tokens SET screenshot_notified = 1 WHERE token = ?", (token,))
         conn.commit()
 
-    uploader_id = row["uploader_id"]
-    viewer_id = row["user_id"]
-
     asyncio.run_coroutine_threadsafe(
-        notify_screenshot(uploader_id, viewer_id),
+        notify_screenshot(row["uploader_id"], row["user_id"]),
         client.loop
     )
     return "", 204
 
-
 async def notify_screenshot(uploader_id, viewer_id):
     try:
-        uploader = await client.fetch_user(int(uploader_id))
         viewer = await client.fetch_user(int(viewer_id))
         guild = client.guilds[0]
-        member = guild.get_member(int(uploader_id))
-        if member:
-            channel = guild.get_channel(1490667068113031178)
-            if channel:
-                await channel.send(
-    f"⚠️ <@&1487455965409448106> **{viewer.display_name}** may have taken a screenshot of a selfie."
-)
-                )
+        channel = guild.get_channel(1490667068113031178)
+        if channel:
+            await channel.send(
+                f"⚠️ <@&1487455965409448106> **{viewer.display_name}** may have taken a screenshot of a selfie."
+            )
     except Exception:
         pass
 
@@ -249,11 +231,9 @@ client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
 SELFIE_CHANNEL_ID = 1514310860926095470
-
 BASE_URL = os.environ.get("BASE_URL", "https://bestiebotpy-production.up.railway.app")
 
 async def purge_expired():
-    """Background task: delete expired selfies and tokens every hour."""
     await client.wait_until_ready()
     while not client.is_closed():
         with get_db() as conn:
@@ -277,20 +257,19 @@ async def on_message(message):
 
     attachment = message.attachments[0]
 
-    # Only handle images
     if not attachment.content_type or not attachment.content_type.startswith("image/"):
         return
 
+    # Download image FIRST before deleting
     image_data = await attachment.read()
 
-    # Download image
     await message.delete()
+
     content_type = attachment.content_type
     uploader_id = str(message.author.id)
     uploader_name = message.author.display_name
     expires_at = datetime.utcnow() + timedelta(hours=12)
 
-    # Save to DB
     with get_db() as conn:
         cursor = conn.execute("""
             INSERT INTO selfies (uploader_id, uploader_name, image_data, content_type, expires_at)
@@ -298,7 +277,6 @@ async def on_message(message):
         """, (uploader_id, uploader_name, image_data, content_type, expires_at.isoformat()))
         selfie_id = cursor.lastrowid
 
-        # Get all members in the guild who can see the channel
         guild = message.guild
         members = [m for m in guild.members if not m.bot]
 
@@ -313,7 +291,6 @@ async def on_message(message):
 
         conn.commit()
 
-    # Confirm to uploader
     try:
         await message.channel.send(
             f"{message.author.mention} Your selfie has been sent to **{tokens_created} members**. "
@@ -323,7 +300,6 @@ async def on_message(message):
     except Exception:
         pass
 
-    # Post public notification in the selfie channel
     try:
         await message.channel.send(
             f"📸 **{uploader_name}** posted a selfie — use `/selfie` to claim your one-time link. Expires in 12 hours."
