@@ -113,10 +113,10 @@ async def on_message(message):
     if not attachment.content_type or not attachment.content_type.startswith("image/"):
         return
 
-    await message.delete()
+    image_data = await attachment.read()
 
     # Download image
-    image_data = await attachment.read()
+    await message.delete()
     content_type = attachment.content_type
     uploader_id = str(message.author.id)
     uploader_name = message.author.display_name
