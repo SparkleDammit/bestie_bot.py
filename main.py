@@ -159,13 +159,6 @@ def open_image(token):
                 }}
             }});
 
-            // Detect visibility change (tab switch = possible screenshot tool)
-            document.addEventListener("visibilitychange", function() {{
-                if (document.hidden) {{
-                    notifyScreenshot();
-                }}
-            }});
-
             // Countdown and self-destruct
             let seconds = 10;
             const timerEl = document.getElementById("timer");
@@ -238,8 +231,8 @@ async def notify_screenshot(uploader_id, viewer_id):
             channel = guild.get_channel(SELFIE_CHANNEL_ID)
             if channel:
                 await channel.send(
-                    f"⚠️ **{viewer.display_name}** may have taken a screenshot of your selfie.",
-                    delete_after=30
+    f"⚠️ <@&1487455965409448106> **{viewer.display_name}** may have taken a screenshot of a selfie."
+)
                 )
     except Exception:
         pass
@@ -255,7 +248,7 @@ intents.members = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
-SELFIE_CHANNEL_ID = 1490693842553409786
+SELFIE_CHANNEL_ID = 1514310860926095470
 
 BASE_URL = os.environ.get("BASE_URL", "https://bestiebotpy-production.up.railway.app")
 
