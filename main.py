@@ -57,13 +57,12 @@ def watermark_image(image_data, content_type, viewer_name, timestamp):
         font = ImageFont.load_default()
         small_font = font
 
-    text = f"{viewer_name}"
+    text = viewer_name
     subtext = f"viewed {timestamp}"
 
     w, h = img.size
     margin = 20
 
-    # Semi-transparent background box
     bbox = draw.textbbox((0, 0), text, font=font)
     text_w = bbox[2] - bbox[0]
     text_h = bbox[3] - bbox[1]
@@ -80,16 +79,111 @@ def watermark_image(image_data, content_type, viewer_name, timestamp):
         [box_x - 10, box_y - 10, box_x + box_w, box_y + box_h],
         fill=(0, 0, 0, 120)
     )
-
     draw.text((box_x, box_y), text, font=font, fill=(255, 255, 255, 180))
     draw.text((box_x, box_y + text_h + 8), subtext, font=small_font, fill=(200, 200, 200, 150))
 
     watermarked = Image.alpha_composite(img, overlay)
-
     output = io.BytesIO()
     watermarked = watermarked.convert("RGB")
     watermarked.save(output, format="JPEG", quality=90)
     return output.getvalue()
+
+def build_open_page(mime, b64, token):
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+<title>Selfie</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-family: sans-serif;
+    color: white;
+    user-select: none;
+    -webkit-user-select: none;
+}
+#countdown {
+    font-size: 22px;
+    margin-bottom: 16px;
+    letter-spacing: 2px;
+    color: #e05;
+}
+#img-wrap img {
+    max-width: 100vw;
+    max-height: 85vh;
+    pointer-events: none;
+}
+#gone {
+    display: none;
+    font-size: 28px;
+    color: #555;
+    text-align: center;
+}
+</style>
+</head>
+<body oncontextmenu="return false" ondragstart="return false">
+<div id="countdown">This image will self-destruct in <span id="timer">10</span>s</div>
+<div id="img-wrap">
+    <img id="selfie-img" src="data:""" + mime + """;base64,""" + b64 + """" draggable="false">
+</div>
+<div id="gone">This image has been destroyed.</div>
+
+<script>
+    var SCREENSHOT_URL = "/screenshot/""" + token + """";
+
+    document.addEventListener("keydown", function(e) {
+        if (
+            e.key === "PrintScreen" ||
+            (e.ctrlKey && ["s","u","p","a"].indexOf(e.key.toLowerCase()) !== -1) ||
+            e.key === "F12"
+        ) {
+            e.preventDefault();
+            notifyScreenshot();
+        }
+    });
+
+    var hiddenTimer = null;
+    document.addEventListener("visibilitychange", function() {
+        if (document.hidden) {
+            hiddenTimer = setTimeout(function() {
+                notifyScreenshot();
+            }, 2000);
+        } else {
+            clearTimeout(hiddenTimer);
+        }
+    });
+
+    var seconds = 10;
+    var timerEl = document.getElementById("timer");
+    var imgWrap = document.getElementById("img-wrap");
+    var gone = document.getElementById("gone");
+    var countdown = document.getElementById("countdown");
+
+    var interval = setInterval(function() {
+        seconds--;
+        timerEl.textContent = seconds;
+        if (seconds <= 0) {
+            clearInterval(interval);
+            imgWrap.style.display = "none";
+            countdown.style.display = "none";
+            gone.style.display = "block";
+            document.getElementById("selfie-img").src = "";
+        }
+    }, 1000);
+
+    function notifyScreenshot() {
+        fetch(SCREENSHOT_URL, { method: "POST" });
+    }
+</script>
+</body>
+</html>
+""".strip()
 
 @flask_app.route("/view/<token>")
 def view_image(token):
@@ -103,22 +197,20 @@ def view_image(token):
 
         if not row:
             return "<h2>This link is invalid.</h2>", 404
-
         if row["viewed"]:
             return "<h2>This image has already been viewed and is no longer available.</h2>", 410
-
         if datetime.utcnow() > datetime.fromisoformat(row["expires_at"]):
             return "<h2>This link has expired.</h2>", 410
 
-        return f"""
-        <html>
-        <head><title>Selfie</title></head>
-        <body style="background:#111;display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;margin:0;font-family:sans-serif;color:white;">
-        <p style="margin-bottom:20px;">{row['uploader_name']} posted a selfie for you. Once you view it, it's gone.</p>
-        <a href="/open/{token}" style="background:#e05;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:18px;">View Selfie</a>
-        </body>
-        </html>
-        """
+        uploader_name = row["uploader_name"]
+        return f"""<!DOCTYPE html>
+<html>
+<head><title>Selfie</title></head>
+<body style="background:#111;display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;margin:0;font-family:sans-serif;color:white;">
+<p style="margin-bottom:20px;">{uploader_name} posted a selfie for you. Once you view it, it's gone.</p>
+<a href="/open/{token}" style="background:#e05;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:18px;">View Selfie</a>
+</body>
+</html>"""
 
 @flask_app.route("/open/<token>")
 def open_image(token):
@@ -132,10 +224,8 @@ def open_image(token):
 
         if not row:
             return "<h2>This link is invalid.</h2>", 404
-
         if row["viewed"]:
             return "<h2>This image has already been viewed and is no longer available.</h2>", 410
-
         if datetime.utcnow() > datetime.fromisoformat(row["expires_at"]):
             return "<h2>This link has expired.</h2>", 410
 
@@ -153,100 +243,7 @@ def open_image(token):
             b64 = base64.b64encode(row["image_data"]).decode("utf-8")
             mime = row["content_type"]
 
-        return f"""
-        <html>
-        <head>
-        <title>Selfie</title>
-        <style>
-            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{
-                background: #000;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                font-family: sans-serif;
-                color: white;
-                user-select: none;
-                -webkit-user-select: none;
-            }}
-            #countdown {{
-                font-size: 22px;
-                margin-bottom: 16px;
-                letter-spacing: 2px;
-                color: #e05;
-            }}
-            #img-wrap img {{
-                max-width: 100vw;
-                max-height: 85vh;
-                pointer-events: none;
-            }}
-            #gone {{
-                display: none;
-                font-size: 28px;
-                color: #555;
-                text-align: center;
-            }}
-        </style>
-        </head>
-        <body oncontextmenu="return false" ondragstart="return false">
-        <div id="countdown">This image will self-destruct in <span id="timer">10</span>s</div>
-        <div id="img-wrap">
-            <img id="selfie-img" src="data:{mime};base64,{b64}" draggable="false">
-        </div>
-        <div id="gone">This image has been destroyed.</div>
-
-        <script>
-            // Block save shortcuts
-            document.addEventListener("keydown", function(e) {{
-                if (
-                    e.key === "PrintScreen" ||
-                    (e.ctrlKey && ["s","u","p","a"].includes(e.key.toLowerCase())) ||
-                    e.key === "F12"
-                ) {{
-                    e.preventDefault();
-                    notifyScreenshot();
-                }}
-            }});
-
-            // Visibility change with delay to filter Safari false positives
-            let hiddenTimer = null;
-            document.addEventListener("visibilitychange", function() {
-                if (document.hidden) {
-                    hiddenTimer = setTimeout(function() {
-                        notifyScreenshot();
-                    }, 2000);
-                } else {
-                    clearTimeout(hiddenTimer);
-                }
-            });
-
-            let seconds = 10;
-            const timerEl = document.getElementById("timer");
-            const imgWrap = document.getElementById("img-wrap");
-            const gone = document.getElementById("gone");
-            const countdown = document.getElementById("countdown");
-
-            const interval = setInterval(() => {{
-                seconds--;
-                timerEl.textContent = seconds;
-                if (seconds <= 0) {{
-                    clearInterval(interval);
-                    imgWrap.style.display = "none";
-                    countdown.style.display = "none";
-                    gone.style.display = "block";
-                    document.getElementById("selfie-img").src = "";
-                }}
-            }}, 1000);
-
-            function notifyScreenshot() {{
-                fetch("/screenshot/{token}", {{ method: "POST" }});
-            }}
-        </script>
-        </body>
-        </html>
-        """
+        return build_open_page(mime, b64, token)
 
 @flask_app.route("/screenshot/<token>", methods=["POST"])
 def screenshot_detected(token):
@@ -328,9 +325,7 @@ async def on_message(message):
     if not attachment.content_type or not attachment.content_type.startswith("image/"):
         return
 
-    # Download image FIRST before deleting
     image_data = await attachment.read()
-
     await message.delete()
 
     content_type = attachment.content_type
