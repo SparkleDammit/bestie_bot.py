@@ -36,6 +36,7 @@ def init_db():
                 selfie_id INTEGER NOT NULL,
                 user_id TEXT NOT NULL,
                 viewed INTEGER DEFAULT 0,
+                screenshot_notified INTEGER DEFAULT 0,
                 FOREIGN KEY (selfie_id) REFERENCES selfies(id)
             )
         """)
@@ -74,7 +75,7 @@ def view_image(token):
 def open_image(token):
     with get_db() as conn:
         row = conn.execute("""
-            SELECT t.viewed, t.selfie_id, s.image_data, s.content_type, s.expires_at
+            SELECT t.viewed, t.selfie_id, s.image_data, s.content_type, s.expires_at, s.uploader_id, t.user_id
             FROM tokens t
             JOIN selfies s ON t.selfie_id = s.id
             WHERE t.token = ?
@@ -95,15 +96,153 @@ def open_image(token):
         import base64
         b64 = base64.b64encode(row["image_data"]).decode("utf-8")
         mime = row["content_type"]
+        uploader_id = row["uploader_id"]
+        viewer_id = row["user_id"]
 
         return f"""
         <html>
-        <head><title>Selfie</title></head>
-        <body style="background:#000;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;">
-        <img src="data:{mime};base64,{b64}" style="max-width:100%;max-height:100vh;">
+        <head>
+        <title>Selfie</title>
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{
+                background: #000;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                font-family: sans-serif;
+                color: white;
+                user-select: none;
+                -webkit-user-select: none;
+            }}
+            #countdown {{
+                font-size: 22px;
+                margin-bottom: 16px;
+                letter-spacing: 2px;
+                color: #e05;
+            }}
+            #img-wrap img {{
+                max-width: 100vw;
+                max-height: 85vh;
+                pointer-events: none;
+            }}
+            #gone {{
+                display: none;
+                font-size: 28px;
+                color: #555;
+                text-align: center;
+            }}
+        </style>
+        </head>
+        <body
+            oncontextmenu="return false"
+            ondragstart="return false"
+        >
+        <div id="countdown">This image will self-destruct in <span id="timer">10</span>s</div>
+        <div id="img-wrap">
+            <img id="selfie-img" src="data:{mime};base64,{b64}" draggable="false">
+        </div>
+        <div id="gone">This image has been destroyed.</div>
+
+        <script>
+            // Block save shortcuts
+            document.addEventListener("keydown", function(e) {{
+                if (
+                    e.key === "PrintScreen" ||
+                    (e.ctrlKey && ["s","u","p","a"].includes(e.key.toLowerCase())) ||
+                    e.key === "F12"
+                ) {{
+                    e.preventDefault();
+                    notifyScreenshot();
+                }}
+            }});
+
+            // Detect visibility change (tab switch = possible screenshot tool)
+            document.addEventListener("visibilitychange", function() {{
+                if (document.hidden) {{
+                    notifyScreenshot();
+                }}
+            }});
+
+            // Countdown and self-destruct
+            let seconds = 10;
+            const timerEl = document.getElementById("timer");
+            const imgWrap = document.getElementById("img-wrap");
+            const gone = document.getElementById("gone");
+            const countdown = document.getElementById("countdown");
+
+            const interval = setInterval(() => {{
+                seconds--;
+                timerEl.textContent = seconds;
+                if (seconds <= 0) {{
+                    clearInterval(interval);
+                    imgWrap.style.display = "none";
+                    countdown.style.display = "none";
+                    gone.style.display = "block";
+                    // Nuke the image data from memory
+                    document.getElementById("selfie-img").src = "";
+                }}
+            }}, 1000);
+
+            // Screenshot notification
+            function notifyScreenshot() {{
+                fetch("/screenshot/{token}", {{ method: "POST" }});
+            }}
+        </script>
         </body>
         </html>
         """
+
+@flask_app.route("/screenshot/<token>", methods=["POST"])
+def screenshot_detected(token):
+    with get_db() as conn:
+        row = conn.execute("""
+            SELECT s.uploader_id, t.user_id
+            FROM tokens t
+            JOIN selfies s ON t.selfie_id = s.id
+            WHERE t.token = ?
+        """, (token,)).fetchone()
+
+        if not row:
+            return "", 204
+
+        # Check if already notified to avoid spam
+        existing = conn.execute(
+            "SELECT 1 FROM tokens WHERE token = ? AND screenshot_notified = 1", (token,)
+        ).fetchone()
+        if existing:
+            return "", 204
+
+        conn.execute("UPDATE tokens SET screenshot_notified = 1 WHERE token = ?", (token,))
+        conn.commit()
+
+    uploader_id = row["uploader_id"]
+    viewer_id = row["user_id"]
+
+    asyncio.run_coroutine_threadsafe(
+        notify_screenshot(uploader_id, viewer_id),
+        client.loop
+    )
+    return "", 204
+
+
+async def notify_screenshot(uploader_id, viewer_id):
+    try:
+        uploader = await client.fetch_user(int(uploader_id))
+        viewer = await client.fetch_user(int(viewer_id))
+        guild = client.guilds[0]
+        member = guild.get_member(int(uploader_id))
+        if member:
+            channel = guild.get_channel(SELFIE_CHANNEL_ID)
+            if channel:
+                await channel.send(
+                    f"⚠️ **{viewer.display_name}** may have taken a screenshot of your selfie.",
+                    delete_after=30
+                )
+    except Exception:
+        pass
 
 def run_flask():
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
