@@ -6,9 +6,10 @@ import uuid
 import asyncio
 import threading
 import base64
-from datetime import datetime, timedelta
-from flask import Flask, send_file, abort
 import io
+from datetime import datetime, timedelta
+from flask import Flask, abort
+from PIL import Image, ImageDraw, ImageFont
 
 # ── Flask app ──────────────────────────────────────────────────────────────────
 flask_app = Flask(__name__)
@@ -36,12 +37,59 @@ def init_db():
                 token TEXT PRIMARY KEY,
                 selfie_id INTEGER NOT NULL,
                 user_id TEXT NOT NULL,
+                viewer_name TEXT NOT NULL DEFAULT '',
                 viewed INTEGER DEFAULT 0,
                 screenshot_notified INTEGER DEFAULT 0,
                 FOREIGN KEY (selfie_id) REFERENCES selfies(id)
             )
         """)
         conn.commit()
+
+def watermark_image(image_data, content_type, viewer_name, timestamp):
+    img = Image.open(io.BytesIO(image_data)).convert("RGBA")
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
+        small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
+    except Exception:
+        font = ImageFont.load_default()
+        small_font = font
+
+    text = f"{viewer_name}"
+    subtext = f"viewed {timestamp}"
+
+    w, h = img.size
+    margin = 20
+
+    # Semi-transparent background box
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+
+    bbox2 = draw.textbbox((0, 0), subtext, font=small_font)
+    sub_w = bbox2[2] - bbox2[0]
+
+    box_w = max(text_w, sub_w) + 20
+    box_h = text_h + 30 + 10
+    box_x = w - box_w - margin
+    box_y = h - box_h - margin
+
+    draw.rectangle(
+        [box_x - 10, box_y - 10, box_x + box_w, box_y + box_h],
+        fill=(0, 0, 0, 120)
+    )
+
+    draw.text((box_x, box_y), text, font=font, fill=(255, 255, 255, 180))
+    draw.text((box_x, box_y + text_h + 8), subtext, font=small_font, fill=(200, 200, 200, 150))
+
+    watermarked = Image.alpha_composite(img, overlay)
+
+    output = io.BytesIO()
+    watermarked = watermarked.convert("RGB")
+    watermarked.save(output, format="JPEG", quality=90)
+    return output.getvalue()
 
 @flask_app.route("/view/<token>")
 def view_image(token):
@@ -76,7 +124,7 @@ def view_image(token):
 def open_image(token):
     with get_db() as conn:
         row = conn.execute("""
-            SELECT t.viewed, t.selfie_id, s.image_data, s.content_type, s.expires_at, s.uploader_id, t.user_id
+            SELECT t.viewed, t.selfie_id, s.image_data, s.content_type, s.expires_at, s.uploader_id, t.user_id, t.viewer_name
             FROM tokens t
             JOIN selfies s ON t.selfie_id = s.id
             WHERE t.token = ?
@@ -94,8 +142,16 @@ def open_image(token):
         conn.execute("UPDATE tokens SET viewed = 1 WHERE token = ?", (token,))
         conn.commit()
 
-        b64 = base64.b64encode(row["image_data"]).decode("utf-8")
-        mime = row["content_type"]
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        viewer_name = row["viewer_name"] or "unknown"
+
+        try:
+            wm_data = watermark_image(row["image_data"], row["content_type"], viewer_name, timestamp)
+            b64 = base64.b64encode(wm_data).decode("utf-8")
+            mime = "image/jpeg"
+        except Exception:
+            b64 = base64.b64encode(row["image_data"]).decode("utf-8")
+            mime = row["content_type"]
 
         return f"""
         <html>
@@ -142,6 +198,7 @@ def open_image(token):
         <div id="gone">This image has been destroyed.</div>
 
         <script>
+            // Block save shortcuts
             document.addEventListener("keydown", function(e) {{
                 if (
                     e.key === "PrintScreen" ||
@@ -149,6 +206,13 @@ def open_image(token):
                     e.key === "F12"
                 ) {{
                     e.preventDefault();
+                    notifyScreenshot();
+                }}
+            }});
+
+            // Visibility change (tab switch, screen lock, screenshot tools)
+            document.addEventListener("visibilitychange", function() {{
+                if (document.hidden) {{
                     notifyScreenshot();
                 }}
             }});
@@ -183,7 +247,7 @@ def open_image(token):
 def screenshot_detected(token):
     with get_db() as conn:
         row = conn.execute("""
-            SELECT s.uploader_id, t.user_id
+            SELECT s.uploader_id, t.user_id, t.viewer_name
             FROM tokens t
             JOIN selfies s ON t.selfie_id = s.id
             WHERE t.token = ?
@@ -202,19 +266,18 @@ def screenshot_detected(token):
         conn.commit()
 
     asyncio.run_coroutine_threadsafe(
-        notify_screenshot(row["uploader_id"], row["user_id"]),
+        notify_screenshot(row["uploader_id"], row["viewer_name"]),
         client.loop
     )
     return "", 204
 
-async def notify_screenshot(uploader_id, viewer_id):
+async def notify_screenshot(uploader_id, viewer_name):
     try:
-        viewer = await client.fetch_user(int(viewer_id))
         guild = client.guilds[0]
         channel = guild.get_channel(1490667068113031178)
         if channel:
             await channel.send(
-                f"⚠️ <@&1487455965409448106> **{viewer.display_name}** may have taken a screenshot of a selfie."
+                f"⚠️ <@&1487455965409448106> **{viewer_name}** may have taken a screenshot of a selfie."
             )
     except Exception:
         pass
@@ -284,9 +347,9 @@ async def on_message(message):
         for member in members:
             token = str(uuid.uuid4())
             conn.execute("""
-                INSERT INTO tokens (token, selfie_id, user_id)
-                VALUES (?, ?, ?)
-            """, (token, selfie_id, str(member.id)))
+                INSERT INTO tokens (token, selfie_id, user_id, viewer_name)
+                VALUES (?, ?, ?, ?)
+            """, (token, selfie_id, str(member.id), member.display_name))
             tokens_created += 1
 
         conn.commit()
