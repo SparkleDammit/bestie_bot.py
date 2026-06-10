@@ -210,12 +210,17 @@ def open_image(token):
                 }}
             }});
 
-            // Visibility change (tab switch, screen lock, screenshot tools)
-            document.addEventListener("visibilitychange", function() {{
-                if (document.hidden) {{
-                    notifyScreenshot();
-                }}
-            }});
+            // Visibility change with delay to filter Safari false positives
+            let hiddenTimer = null;
+            document.addEventListener("visibilitychange", function() {
+                if (document.hidden) {
+                    hiddenTimer = setTimeout(function() {
+                        notifyScreenshot();
+                    }, 2000);
+                } else {
+                    clearTimeout(hiddenTimer);
+                }
+            });
 
             let seconds = 10;
             const timerEl = document.getElementById("timer");
