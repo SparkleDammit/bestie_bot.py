@@ -228,7 +228,7 @@ async def notify_screenshot(uploader_id, viewer_id):
         guild = client.guilds[0]
         member = guild.get_member(int(uploader_id))
         if member:
-            channel = guild.get_channel(SELFIE_CHANNEL_ID)
+            channel = guild.get_channel(1490667068113031178)
             if channel:
                 await channel.send(
     f"⚠️ <@&1487455965409448106> **{viewer.display_name}** may have taken a screenshot of a selfie."
