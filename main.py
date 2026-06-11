@@ -15,7 +15,8 @@ from PIL import Image, ImageDraw, ImageFont
 flask_app = Flask(__name__)
 
 def get_db():
-    conn = sqlite3.connect("selfies.db")
+    os.makedirs("/app/data", exist_ok=True)
+    conn = sqlite3.connect("/app/data/selfies.db")
     conn.row_factory = sqlite3.Row
     return conn
 
