@@ -288,7 +288,10 @@ intents.members = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
-SELFIE_CHANNEL_ID = 1514310860926095470
+SELFIE_CHANNEL_IDS = {
+    1514310860926095470,  # production selfie channel
+    1514666519819325632,  # bot testing selfie channel
+}
 BASE_URL = os.environ.get("BASE_URL", "https://bestiebotpy-production.up.railway.app")
 
 async def purge_expired():
@@ -308,7 +311,7 @@ async def purge_expired():
 async def on_message(message):
     if message.author.bot:
         return
-    if message.channel.id != SELFIE_CHANNEL_ID:
+    if message.channel.id not in SELFIE_CHANNEL_IDS:
         return
     if not message.attachments:
         return
