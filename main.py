@@ -28,6 +28,7 @@ def init_db():
                 uploader_name TEXT NOT NULL,
                 image_data BLOB NOT NULL,
                 content_type TEXT NOT NULL,
+                caption TEXT DEFAULT '',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 expires_at TIMESTAMP NOT NULL
             )
@@ -317,6 +318,8 @@ async def on_message(message):
         return
 
     image_data = await attachment.read()
+    caption = message.content.strip() if message.content else ""
+
     await message.delete()
 
     content_type = attachment.content_type
@@ -326,9 +329,9 @@ async def on_message(message):
 
     with get_db() as conn:
         cursor = conn.execute("""
-            INSERT INTO selfies (uploader_id, uploader_name, image_data, content_type, expires_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (uploader_id, uploader_name, image_data, content_type, expires_at.isoformat()))
+            INSERT INTO selfies (uploader_id, uploader_name, image_data, content_type, caption, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (uploader_id, uploader_name, image_data, content_type, caption, expires_at.isoformat()))
         selfie_id = cursor.lastrowid
 
         guild = message.guild
@@ -354,45 +357,51 @@ async def on_message(message):
     except Exception:
         pass
 
+    # Build public notification with optional caption
+    notification = f"📸 **{uploader_name}** posted a selfie."
+    if caption:
+        notification += f"\n> {caption}"
+    notification += "\nUse `/selfie` to claim your one-time link. Expires in 12 hours."
+
     try:
-        await message.channel.send(
-            f"📸 **{uploader_name}** posted a selfie — use `/selfie` to claim your one-time link. Expires in 12 hours."
-        )
+        await message.channel.send(notification)
     except Exception:
         pass
 
-@tree.command(name="selfie", description="Check if there's a selfie waiting for you")
+@tree.command(name="selfie", description="Check if there are selfies waiting for you")
 async def selfie(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
 
     with get_db() as conn:
-        row = conn.execute("""
-            SELECT t.token, s.uploader_name, s.expires_at
+        rows = conn.execute("""
+            SELECT t.token, s.uploader_name, s.expires_at, s.caption
             FROM tokens t
             JOIN selfies s ON t.selfie_id = s.id
             WHERE t.user_id = ? AND t.viewed = 0
             AND s.expires_at > datetime('now')
             ORDER BY s.created_at DESC
-            LIMIT 1
-        """, (user_id,)).fetchone()
+        """, (user_id,)).fetchall()
 
-    if not row:
+    if not rows:
         await interaction.response.send_message(
             "No selfies waiting for you right now.",
             ephemeral=True
         )
         return
 
-    link = f"{BASE_URL}/view/{row['token']}"
-    uploader = row["uploader_name"]
-    expires = datetime.fromisoformat(row["expires_at"]).strftime("%H:%M UTC")
+    lines = []
+    for i, row in enumerate(rows, 1):
+        link = f"{BASE_URL}/view/{row['token']}"
+        expires = datetime.fromisoformat(row["expires_at"]).strftime("%H:%M UTC")
+        line = f"**{i}. {row['uploader_name']}** — expires at {expires}\n[View it here]({link})"
+        if row["caption"]:
+            line += f"\n> {row['caption']}"
+        lines.append(line)
 
-    await interaction.response.send_message(
-        f"**{uploader}** posted a selfie for you.\n"
-        f"[View it here]({link})\n"
-        f"*Expires at {expires} — one view only.*",
-        ephemeral=True
-    )
+    message = "**Selfies waiting for you:**\n\n" + "\n\n".join(lines)
+    message += "\n\n*Each link is one-time only.*"
+
+    await interaction.response.send_message(message, ephemeral=True)
 
 @tree.command(name="views", description="See how many people have viewed your most recent selfie")
 async def views(interaction: discord.Interaction):
