@@ -7,7 +7,7 @@ import asyncio
 import threading
 import base64
 import io
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Flask, abort
 from PIL import Image, ImageDraw, ImageFont
 
@@ -329,7 +329,8 @@ async def on_message(message):
     content_type = attachment.content_type
     uploader_id = str(message.author.id)
     uploader_name = message.author.display_name
-    expires_at = datetime.utcnow() + timedelta(hours=12)
+    expires_at = (datetime.now(timezone.utc) + timedelta(hours=12)).strftime('%Y-%m-%d %H:%M:%S')
+
 
     with get_db() as conn:
         cursor = conn.execute("""
