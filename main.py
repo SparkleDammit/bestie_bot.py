@@ -402,10 +402,26 @@ async def selfie(interaction: discord.Interaction):
             line += f"\n> {row['caption']}"
         lines.append(line)
 
-    message = "**Selfies waiting for you:**\n\n" + "\n\n".join(lines)
-    message += "\n\n*Each link is one-time only.*"
+    header = "**Selfies waiting for you:**\n\n"
+    footer = "\n\n*Each link is one-time only.*"
 
-    await interaction.response.send_message(message, ephemeral=True)
+    LIMIT = 2000
+    chunks = []
+    current = header
+
+    for line in lines:
+        addition = line + "\n\n"
+        if len(current) + len(addition) + len(footer) > LIMIT:
+            chunks.append(current.rstrip())
+            current = ""
+        current += addition
+
+    current += footer
+    chunks.append(current.rstrip())
+
+    await interaction.response.send_message(chunks[0], ephemeral=True)
+    for chunk in chunks[1:]:
+        await interaction.followup.send(chunk, ephemeral=True)
 
 @tree.command(name="views", description="See how many people have viewed your most recent selfie")
 async def views(interaction: discord.Interaction):
