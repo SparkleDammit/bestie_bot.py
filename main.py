@@ -336,7 +336,7 @@ async def on_message(message):
         cursor = conn.execute("""
             INSERT INTO selfies (uploader_id, uploader_name, image_data, content_type, caption, expires_at)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (uploader_id, uploader_name, image_data, content_type, caption, expires_at.isoformat()))
+        """, (uploader_id, uploader_name, image_data, content_type, caption, expires_at))
         selfie_id = cursor.lastrowid
 
         guild = message.guild
