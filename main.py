@@ -91,71 +91,27 @@ def watermark_image(image_data, content_type, viewer_name, timestamp):
     return output.getvalue()
 
 def build_open_page(mime, b64, token):
-    return """<!DOCTYPE html>
-<html>
-<head>
-<title>Selfie</title>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-    background: #000;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    font-family: sans-serif;
-    color: white;
-    user-select: none;
-    -webkit-user-select: none;
-}
-#countdown {
-    font-size: 22px;
-    margin-bottom: 16px;
-    letter-spacing: 2px;
-    color: #e05;
-}
-#img-wrap img {
-    max-width: 100vw;
-    max-height: 85vh;
-    pointer-events: none;
-}
-#gone {
-    display: none;
-    font-size: 28px;
-    color: #555;
-    text-align: center;
-}
-</style>
-</head>
-<body oncontextmenu="return false" ondragstart="return false">
-<div id="countdown">This image will self-destruct in <span id="timer">10</span>s</div>
-<div id="img-wrap">
-    <img id="selfie-img" src="data:""" + mime + """;base64,""" + b64 + """" draggable="false">
-</div>
-<div id="gone">This image has been destroyed.</div>
+    is_video = mime.startswith("video/")
 
-<script>
-    var SCREENSHOT_URL = "/screenshot/""" + token + """";
-
-    document.addEventListener("keydown", function(e) {
-        if (
-            e.key === "PrintScreen" ||
-            (e.ctrlKey && ["s","u","p","a"].indexOf(e.key.toLowerCase()) !== -1) ||
-            e.key === "F12"
-        ) {
-            e.preventDefault();
-            notifyScreenshot();
-        }
-    });
-
+    if is_video:
+        media_html = f'<video id="selfie-img" src="data:{mime};base64,{b64}" autoplay playsinline muted style="max-width:100vw;max-height:85vh;pointer-events:none;"></video>'
+        countdown_html = '<div id="countdown">This video will self-destruct when it ends</div>'
+        timer_js = """\
+    var media = document.getElementById("selfie-img");
+    media.addEventListener("ended", function() {
+        imgWrap.style.display = "none";
+        countdown.style.display = "none";
+        gone.style.display = "block";
+        media.src = "";
+        imageBurned = true;
+    });"""
+        destroyed_label = "video"
+    else:
+        media_html = f'<img id="selfie-img" src="data:{mime};base64,{b64}" draggable="false">'
+        countdown_html = '<div id="countdown">This image will self-destruct in <span id="timer">10</span>s</div>'
+        timer_js = """\
     var seconds = 10;
     var timerEl = document.getElementById("timer");
-    var imgWrap = document.getElementById("img-wrap");
-    var gone = document.getElementById("gone");
-    var countdown = document.getElementById("countdown");
-    var imageBurned = false;
-
     var interval = setInterval(function() {
         seconds--;
         timerEl.textContent = seconds;
@@ -167,15 +123,81 @@ body {
             document.getElementById("selfie-img").src = "";
             imageBurned = true;
         }
-    }, 1000);
+    }, 1000);"""
+        destroyed_label = "image"
 
-    function notifyScreenshot() {
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+<title>Selfie</title>
+<style>
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-family: sans-serif;
+    color: white;
+    user-select: none;
+    -webkit-user-select: none;
+}}
+#countdown {{
+    font-size: 22px;
+    margin-bottom: 16px;
+    letter-spacing: 2px;
+    color: #e05;
+}}
+#img-wrap img, #img-wrap video {{
+    max-width: 100vw;
+    max-height: 85vh;
+    pointer-events: none;
+}}
+#gone {{
+    display: none;
+    font-size: 28px;
+    color: #555;
+    text-align: center;
+}}
+</style>
+</head>
+<body oncontextmenu="return false" ondragstart="return false">
+{countdown_html}
+<div id="img-wrap">
+    {media_html}
+</div>
+<div id="gone">This {destroyed_label} has been destroyed.</div>
+
+<script>
+    var SCREENSHOT_URL = "/screenshot/{token}";
+
+    document.addEventListener("keydown", function(e) {{
+        if (
+            e.key === "PrintScreen" ||
+            (e.ctrlKey && ["s","u","p","a"].indexOf(e.key.toLowerCase()) !== -1) ||
+            e.key === "F12"
+        ) {{
+            e.preventDefault();
+            notifyScreenshot();
+        }}
+    }});
+
+    var imgWrap = document.getElementById("img-wrap");
+    var gone = document.getElementById("gone");
+    var countdown = document.getElementById("countdown");
+    var imageBurned = false;
+
+{timer_js}
+
+    function notifyScreenshot() {{
         if (imageBurned) return;
-        fetch(SCREENSHOT_URL, { method: "POST" });
-    }
+        fetch(SCREENSHOT_URL, {{ method: "POST" }});
+    }}
 </script>
 </body>
-</html>""".strip()
+</html>"""
 
 @flask_app.route("/view/<token>")
 def view_image(token):
@@ -228,11 +250,15 @@ def open_image(token):
         timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
         viewer_name = row["viewer_name"] or "unknown"
 
-        try:
-            wm_data = watermark_image(row["image_data"], row["content_type"], viewer_name, timestamp)
-            b64 = base64.b64encode(wm_data).decode("utf-8")
-            mime = "image/jpeg"
-        except Exception:
+        if row["content_type"].startswith("image/"):
+            try:
+                wm_data = watermark_image(row["image_data"], row["content_type"], viewer_name, timestamp)
+                b64 = base64.b64encode(wm_data).decode("utf-8")
+                mime = "image/jpeg"
+            except Exception:
+                b64 = base64.b64encode(row["image_data"]).decode("utf-8")
+                mime = row["content_type"]
+        else:
             b64 = base64.b64encode(row["image_data"]).decode("utf-8")
             mime = row["content_type"]
 
@@ -318,7 +344,10 @@ async def on_message(message):
 
     attachment = message.attachments[0]
 
-    if not attachment.content_type or not attachment.content_type.startswith("image/"):
+    if not attachment.content_type or not (
+        attachment.content_type.startswith("image/") or
+        attachment.content_type.startswith("video/")
+    ):
         return
 
     image_data = await attachment.read()
