@@ -8,7 +8,7 @@ import threading
 import base64
 import io
 from datetime import datetime, timedelta, timezone
-from flask import Flask, abort
+from flask import Flask, abort, Response
 from PIL import Image, ImageDraw, ImageFont
 
 # ── Flask app ──────────────────────────────────────────────────────────────────
@@ -94,7 +94,7 @@ def build_open_page(mime, b64, token):
     is_video = mime.startswith("video/")
 
     if is_video:
-        media_html = f'<video id="selfie-img" src="data:{mime};base64,{b64}" autoplay playsinline muted style="max-width:100vw;max-height:85vh;pointer-events:none;"></video>'
+        media_html = f'<video id="selfie-img" src="/stream/{token}" autoplay playsinline muted style="max-width:100vw;max-height:85vh;pointer-events:none;"></video>'
         countdown_html = '<div id="countdown">This video will self-destruct when it ends</div>'
         timer_js = """\
     var media = document.getElementById("selfie-img");
@@ -258,11 +258,9 @@ def open_image(token):
             except Exception:
                 b64 = base64.b64encode(row["image_data"]).decode("utf-8")
                 mime = row["content_type"]
+            return build_open_page(mime, b64, token)
         else:
-            b64 = base64.b64encode(row["image_data"]).decode("utf-8")
-            mime = row["content_type"]
-
-        return build_open_page(mime, b64, token)
+            return build_open_page(row["content_type"], None, token)
 
 @flask_app.route("/screenshot/<token>", methods=["POST"])
 def screenshot_detected(token):
@@ -303,6 +301,23 @@ async def notify_screenshot(uploader_id, viewer_name):
     except Exception:
         pass
 
+@flask_app.route("/stream/<token>")
+def serve_media(token):
+    with get_db() as conn:
+        row = conn.execute("""
+            SELECT s.image_data, s.content_type, s.expires_at
+            FROM tokens t
+            JOIN selfies s ON t.selfie_id = s.id
+            WHERE t.token = ?
+        """, (token,)).fetchone()
+
+    if not row:
+        abort(404)
+    if datetime.utcnow() > datetime.fromisoformat(row["expires_at"]):
+        abort(410)
+
+    return Response(row["image_data"], content_type=row["content_type"])
+
 def run_flask():
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
@@ -323,14 +338,17 @@ BASE_URL = os.environ.get("BASE_URL", "https://bestiebotpy-production.up.railway
 async def purge_expired():
     await client.wait_until_ready()
     while not client.is_closed():
-        with get_db() as conn:
-            conn.execute("""
-                DELETE FROM tokens WHERE selfie_id IN (
-                    SELECT id FROM selfies WHERE expires_at < datetime('now')
-                )
-            """)
-            conn.execute("DELETE FROM selfies WHERE expires_at < datetime('now')")
-            conn.commit()
+        try:
+            with get_db() as conn:
+                conn.execute("""
+                    DELETE FROM tokens WHERE selfie_id IN (
+                        SELECT id FROM selfies WHERE expires_at < datetime('now')
+                    )
+                """)
+                conn.execute("DELETE FROM selfies WHERE expires_at < datetime('now')")
+                conn.commit()
+        except Exception as e:
+            print(f"Purge error: {e}")
         await asyncio.sleep(3600)
 
 @client.event
